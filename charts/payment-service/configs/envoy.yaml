@@ -1,1 +1,46 @@
+static_resources:
+  listeners:
+  - address:
+      socket_address:
+        address: 0.0.0.0
+        port_value: 10000 # Puerto expuesto por Envoy
+    filter_chains:
+    - filters:
+      - name: envoy.filters.network.http_connection_manager
+        typed_config:
+          "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+          stat_prefix: ingress_http
+          route_config:
+            name: local_route
+            virtual_hosts:
+            - name: backend
+              domains: ["*"]
+              routes:
+              - match: { prefix: "/" }
+                route: { cluster: payment_service_local }
+          http_filters:
+          - name: envoy.filters.http.router
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
 
+  clusters:
+  - name: payment_service_local
+    connect_timeout: 0.25s
+    type: STATIC
+    lb_policy: ROUND_ROBIN
+    load_assignment:
+      cluster_name: payment_service_local
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: 127.0.0.1
+                port_value: 8080 # Puerto de la App de Pagos
+    circuit_breakers:
+      thresholds:
+      - priority: DEFAULT
+        max_connections: 100       # Máx conexiones HTTP/1.1
+        max_pending_requests: 50   # Máx solicitudes en cola
+        max_requests: 100          # Máx solicitudes paralelas (HTTP/2)
+        max_retries: 3             # Evita "retry storms"
